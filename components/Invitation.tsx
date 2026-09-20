@@ -5,12 +5,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 const mapsUrl = 'https://www.google.com/maps/place/Raza+hall/@19.061649,72.9148915,1066m/data=!3m1!1e3!4m6!3m5!1s0x3be7c7d956555e75:0x735251cffa68dbaf!8m2!3d19.06094!4d72.91452!16s%2Fg%2F11rnk6cxgz?entry=ttu&g_ep=EgoyMDI2MDkxNi4wIKXMDSoASAFQAw%3D%3D';
 const targetMs = Date.parse('2026-09-27T19:00:00+05:30');
  
-// The 9 invitation sections, in document order. Each id must match a real
-// element in the JSX below. This is the single source of truth for section
-// count/order used by the progress dots, the "1 / 9" cue and keyboard nav —
-// so navigation never depends on hard-coded pixel positions.
-const sectionIds = ['hero', 'quran78', 'celebration', 'detail', 'event', 'families', 'venue', 'dua', 'closing'];
- 
 function buildCalendarDays() {
   const firstDay = new Date(2026, 8, 1).getDay();
   const daysInMonth = new Date(2026, 9, 0).getDate();
@@ -59,31 +53,14 @@ export default function Invitation() {
   const [interstitialFading, setInterstitialFading] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [countdown, setCountdown] = useState({ days: '--', hours: '--', minutes: '--', seconds: '--', after: false });
-  // Which of the 9 sections is currently on screen (0-based). Drives the
-  // progress dots, the "1 / 9" hero cue, and where keyboard nav jumps
-  // to/from. Kept in a ref too so the auto-scroll/keyboard effect (which
-  // intentionally only re-runs on `stage`, not on every section change)
-  // always reads the latest value without re-attaching its listeners.
-  const [activeIndex, setActiveIndex] = useState(0);
-  const activeIndexRef = useRef(0);
+  // Shows the "scroll to continue" hint on the first screen until the guest
+  // scrolls even slightly (by hand or via auto-scroll) — a lightweight,
+  // self-contained signal, independent of the auto-scroll mechanism itself.
+  const [showHint, setShowHint] = useState(true);
   const audioRef = useRef<HTMLAudioElement>(null);
   const autoScrollRef = useRef<number | null>(null);
   const autoScrollCancelledRef = useRef(false);
   const calendarDays = useMemo(buildCalendarDays, []);
- 
-  // Scrolls to a given section by id (clamped to a valid index) instead of a
-  // calculated pixel offset, so it stays correct regardless of viewport
-  // size, address-bar collapsing, or content reflow. Used by the progress
-  // dots and by keyboard navigation. Treated as a deliberate user action:
-  // it always cancels any in-progress auto-scroll first.
-  const goToSection = (index: number) => {
-    const clamped = Math.max(0, Math.min(sectionIds.length - 1, index));
-    cancelAutoScroll();
-    const el = document.getElementById(sectionIds[clamped]);
-    if (!el) return;
-    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
-  };
  
   useEffect(() => {
     const audio = audioRef.current;
@@ -133,36 +110,39 @@ export default function Invitation() {
     autoScrollCancelledRef.current = true;
   };
  
-  // Auto-scroll paces itself against the *total* distance to cover (so a
-  // 9-section page with generous dwell-holds still finishes in a sensible
-  // ~30s, instead of a flat px/second speed that's far too slow for a tall
-  // page and far too fast for a short one). It still recomputes the
-  // scrollable distance on every frame instead of only once at the start,
-  // so it keeps working correctly if the page's height changes mid-scroll
-  // (images finishing layout, a font swap, an orientation change) — the
-  // clamp against a freshly-measured max means it can never overshoot past
-  // the true bottom. The per-frame delta is clamped so that if the tab was
+  // Auto-scroll nudges the page forward a little every frame via a plain
+  // constant speed, with the scrollable distance re-measured fresh on every
+  // frame (never computed once and trusted) — so it keeps working correctly
+  // if the page's height changes mid-scroll (images finishing layout, a
+  // font swap, an orientation change) and can never overshoot past the true
+  // bottom. The per-frame delta is clamped so that if the tab was
   // backgrounded/throttled and rAF pauses for a while, resuming doesn't
-  // suddenly snap the page a huge distance. Height is read from both
-  // `documentElement` and `body`, since browsers disagree on which one
-  // reliably reports full document height. The scroll itself uses the
-  // 2-argument `scrollTo(x, y)` form rather than the options-object form —
-  // it's always an instant jump with no ambiguity, whereas some mobile
-  // browsers have had bugs honoring `{ behavior: 'auto' }` consistently
-  // against a global `scroll-behavior: smooth` on <html>.
-  const getMaxScroll = () => Math.max(
-    0,
-    Math.max(document.documentElement.scrollHeight, document.body.scrollHeight) - window.innerHeight
-  );
+  // suddenly snap the page a huge distance.
+  //
+  // Critically, each frame's nudge is applied by setting `scrollTop`
+  // directly rather than calling `scrollTo()`/`scrollBy()`. Per the CSSOM
+  // View spec, those APIs' default ("auto") behavior explicitly defers to
+  // the element's CSS `scroll-behavior` — and this page sets
+  // `html{scroll-behavior:smooth}`. That means a `scrollTo` call every
+  // ~16ms was restarting a smooth-scroll animation toward a target only a
+  // few pixels ahead of the last one, before the previous animation had
+  // time to settle. Several mobile browsers respond to that "perpetually
+  // restarted" pattern by barely moving the page at all — visually
+  // indistinguishable from auto-scroll doing nothing — even though the
+  // exact same loop looked fine on desktop. Setting `scrollTop` is always
+  // an immediate jump, completely unaffected by `scroll-behavior`, so it
+  // can't fight itself like that on any browser.
+  const getScrollingElement = () => document.scrollingElement || document.documentElement;
+ 
+  const getMaxScroll = () => Math.max(0, getScrollingElement().scrollHeight - window.innerHeight);
  
   const startAutoScroll = () => {
     if (typeof window === 'undefined') return;
  
     autoScrollCancelledRef.current = false;
-    const totalDurationMs = 32000; // full first-to-last pass
-    const initialMaxScroll = getMaxScroll();
-    const pxPerSecond = initialMaxScroll > 0 ? initialMaxScroll / (totalDurationMs / 1000) : 0;
+    const pxPerSecond = 220; // full first-to-last pass in roughly 30-40s depending on content height
     let last = performance.now();
+    const el = getScrollingElement();
  
     const tick = (now: number) => {
       if (autoScrollCancelledRef.current) return;
@@ -170,8 +150,8 @@ export default function Invitation() {
       last = now;
  
       const maxScroll = getMaxScroll();
-      const nextY = Math.min(window.scrollY + pxPerSecond * dt, maxScroll);
-      window.scrollTo(0, nextY);
+      const nextY = Math.min(el.scrollTop + pxPerSecond * dt, maxScroll);
+      el.scrollTop = nextY;
  
       if (nextY < maxScroll - 0.5) {
         autoScrollRef.current = window.requestAnimationFrame(tick);
@@ -197,35 +177,17 @@ export default function Invitation() {
     // its own programmatic scroll.
     const handlePointerInteraction = () => cancelAutoScroll();
  
-    // Keyboard acts as real navigation, not just a pause: arrow/page keys
-    // move between the 9 sections by id, same as tapping a progress dot.
-    const handleKeyNav = (event: KeyboardEvent) => {
-      cancelAutoScroll();
-      const target = event.target as HTMLElement | null;
-      if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
-      if (event.metaKey || event.ctrlKey || event.altKey) return;
- 
-      if (event.key === 'ArrowDown' || event.key === 'PageDown') {
-        event.preventDefault();
-        goToSection(activeIndexRef.current + 1);
-      } else if (event.key === 'ArrowUp' || event.key === 'PageUp') {
-        event.preventDefault();
-        goToSection(activeIndexRef.current - 1);
-      } else if (event.key === 'Home') {
-        event.preventDefault();
-        goToSection(0);
-      } else if (event.key === 'End') {
-        event.preventDefault();
-        goToSection(sectionIds.length - 1);
-      }
-    };
+    // Keyboard input pauses auto-scroll the same as any other interaction;
+    // normal browser keyboard scrolling (arrows, space, Page Up/Down) is
+    // left alone so it keeps working exactly as guests expect.
+    const handleKeyNav = () => cancelAutoScroll();
  
     // A brief pause on section 1 before the cinematic auto-scroll begins,
     // so it reads as "the invitation is about to guide you" rather than
     // the page moving out from under the guest the instant it appears.
-    // Reduced-motion guests never get auto-scroll at all — for them the
-    // progress dots and cue below are the only (fully sufficient) way
-    // through the 9 sections.
+    // Reduced-motion guests never get auto-scroll at all — normal browser
+    // scrolling is the only (fully sufficient) way through the invitation
+    // for them.
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
     const startTimer = window.setTimeout(() => {
       if (!reduce.matches) startAutoScroll();
@@ -246,6 +208,18 @@ export default function Invitation() {
     };
   }, [stage]);
  
+  // Shows the "scroll to continue" hint until the guest has scrolled even a
+  // little (by hand, or via auto-scroll) — self-contained and independent
+  // of the auto-scroll mechanism itself, so it still works even in the
+  // (unlikely, but possible) case auto-scroll fails to start at all.
+  useEffect(() => {
+    if (stage !== 'in') return;
+    setShowHint(true);
+    const onScroll = () => setShowHint(window.scrollY < 24);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [stage]);
+ 
   useEffect(() => {
     if (stage === 'cover') return;
     const scenes = Array.from(document.querySelectorAll<HTMLElement>('main > [data-scene]'));
@@ -264,24 +238,10 @@ export default function Invitation() {
  
     const update = () => {
       frame = 0;
+      if (reduce.matches) return;
       const vh = window.innerHeight;
       // Read every rect first, then write, so the browser lays out once per frame.
       const rects = scenes.map((el) => el.getBoundingClientRect());
- 
-      // Which section is "current" for the progress dots / hero cue / keyboard
-      // nav: the last one whose top has crossed the upper half of the screen.
-      // Computed from the same rects as the crossfade math below (no extra
-      // scroll listener or IntersectionObserver needed) and kept even when
-      // reduced motion skips the animation writes further down, so the dots
-      // still work for those guests.
-      let currentIndex = 0;
-      rects.forEach((r, i) => { if (r.top <= vh * 0.5) currentIndex = i; });
-      if (activeIndexRef.current !== currentIndex) {
-        activeIndexRef.current = currentIndex;
-        setActiveIndex(currentIndex);
-      }
- 
-      if (reduce.matches) return;
  
       scenes.forEach((el, i) => {
         if (el.dataset.scene !== 'art') return; // live sections (.event/.venue) only act as covers
@@ -430,10 +390,10 @@ export default function Invitation() {
             <ArtScene id="quran78" z={2} motion="motion-still" src="/assets/pages/quran-78.jpg"
               alt="Qur'an 78:8 — And We created you in pairs. A connection written by Allah, a journey blessed by dua, a future built on love and faith." />
  
-            <ArtScene id="celebration" z={3} motion="motion-lively" src="/assets/pages/story-celebration.jpg"
+            <ArtScene z={3} motion="motion-lively" src="/assets/pages/story-celebration.jpg"
               alt="Moments that made our story — Saniya and Hasnain amid sparklers at their Nikkah. From Nikkah to a new chapter... Alhamdulillah." />
  
-            <ArtScene id="detail" z={4} motion="motion-slow" src="/assets/pages/story-detail.jpg"
+            <ArtScene z={4} motion="motion-slow" src="/assets/pages/story-detail.jpg"
               alt="Two hands, one journey, always together — mehndi-adorned hands with a flower bouquet." />
  
             <section className="event reveal" id="event" data-scene="live" style={{ zIndex: 5 }}>
@@ -491,38 +451,17 @@ export default function Invitation() {
             <ArtScene id="dua" z={8} motion="motion-still" src="/assets/pages/dua-30-21.jpg"
               alt="A dua for their journey — Surah Ar-Rum 30:21: And of His signs is that He created for you from yourselves mates that you may find tranquillity in them, and He placed between you affection and mercy. Indeed, in that are signs for a people who give thought." />
  
-            <ArtScene id="closing" z={9} motion="motion-still" src="/assets/pages/closing.jpg"
+            <ArtScene z={9} motion="motion-still" src="/assets/pages/closing.jpg"
               alt="Thank you, Saniya &amp; Hasnain, 27.09.2026. With love and duas for our beautiful journey ahead. Jazakallahu khairan for being a part of our story." />
           </>
         )}
       </main>
  
-      {/* First-screen discoverability + always-available manual navigation.
-          These render as soon as the invitation is open, independent of
-          whether auto-scroll ever starts or works, so a guest can never
-          reasonably conclude section 1 is the whole invitation. */}
-      {stage === 'in' && (
-        <nav className="section-nav" aria-label="Invitation sections">
-          <span className="section-nav-count" aria-hidden="true">{activeIndex + 1} / {sectionIds.length}</span>
-          <ol>
-            {sectionIds.map((id, i) => (
-              <li key={id}>
-                <button
-                  type="button"
-                  className={i === activeIndex ? 'active' : ''}
-                  aria-label={`Go to section ${i + 1} of ${sectionIds.length}`}
-                  aria-current={i === activeIndex ? 'true' : undefined}
-                  onClick={() => goToSection(i)}
-                />
-              </li>
-            ))}
-          </ol>
-        </nav>
-      )}
- 
-      {stage === 'in' && activeIndex === 0 && (
+      {/* First-screen discoverability: a simple, self-contained cue that
+          more content exists below, independent of whether auto-scroll
+          ever starts or works. */}
+      {stage === 'in' && showHint && (
         <div className="scroll-cue" aria-hidden="true">
-          <span className="scroll-cue-count">1 / {sectionIds.length}</span>
           <span className="scroll-cue-chevron">↓</span>
           <span className="scroll-cue-text">Scroll to continue</span>
         </div>
