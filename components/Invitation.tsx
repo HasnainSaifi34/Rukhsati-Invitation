@@ -4,6 +4,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
  
 const mapsUrl = 'https://www.google.com/maps/place/Raza+hall/@19.061649,72.9148915,1066m/data=!3m1!1e3!4m6!3m5!1s0x3be7c7d956555e75:0x735251cffa68dbaf!8m2!3d19.06094!4d72.91452!16s%2Fg%2F11rnk6cxgz?entry=ttu&g_ep=EgoyMDI2MDkxNi4wIKXMDSoASAFQAw%3D%3D';
 const targetMs = Date.parse('2026-09-27T19:00:00+05:30');
+
+// The 9 invitation sections, in document order. Each id must match a real
+// element in the JSX below. This is the single source of truth for section
+// count/order used by the progress dots, the "1 / 9" cue and keyboard nav —
+// so navigation never depends on hard-coded pixel positions.
+const sectionIds = ['hero', 'quran78', 'celebration', 'detail', 'event', 'families', 'venue', 'dua', 'closing'];
  
 function buildCalendarDays() {
   const firstDay = new Date(2026, 8, 1).getDay();
@@ -53,10 +59,31 @@ export default function Invitation() {
   const [interstitialFading, setInterstitialFading] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [countdown, setCountdown] = useState({ days: '--', hours: '--', minutes: '--', seconds: '--', after: false });
+  // Which of the 9 sections is currently on screen (0-based). Drives the
+  // progress dots, the "1 / 9" hero cue, and where keyboard nav jumps
+  // to/from. Kept in a ref too so the auto-scroll/keyboard effect (which
+  // intentionally only re-runs on `stage`, not on every section change)
+  // always reads the latest value without re-attaching its listeners.
+  const [activeIndex, setActiveIndex] = useState(0);
+  const activeIndexRef = useRef(0);
   const audioRef = useRef<HTMLAudioElement>(null);
   const autoScrollRef = useRef<number | null>(null);
   const autoScrollCancelledRef = useRef(false);
   const calendarDays = useMemo(buildCalendarDays, []);
+
+  // Scrolls to a given section by id (clamped to a valid index) instead of a
+  // calculated pixel offset, so it stays correct regardless of viewport
+  // size, address-bar collapsing, or content reflow. Used by the progress
+  // dots and by keyboard navigation. Treated as a deliberate user action:
+  // it always cancels any in-progress auto-scroll first.
+  const goToSection = (index: number) => {
+    const clamped = Math.max(0, Math.min(sectionIds.length - 1, index));
+    cancelAutoScroll();
+    const el = document.getElementById(sectionIds[clamped]);
+    if (!el) return;
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+  };
  
   useEffect(() => {
     const audio = audioRef.current;
@@ -106,26 +133,32 @@ export default function Invitation() {
     autoScrollCancelledRef.current = true;
   };
 
+  // Auto-scroll is a pure enhancement: constant speed (not a fixed total
+  // duration), and it recomputes the scrollable distance on every frame
+  // instead of once at the start. That means it keeps working correctly
+  // even if the page's height changes mid-scroll (images finishing layout,
+  // a font swap, an orientation change) and it degrades gracefully if a
+  // frame is skipped — it just covers less distance that frame instead of
+  // jumping. The per-frame delta is clamped so that if the tab was
+  // backgrounded/throttled and rAF pauses for a while, resuming doesn't
+  // suddenly snap the page a huge distance.
   const startAutoScroll = () => {
     if (typeof window === 'undefined') return;
 
     autoScrollCancelledRef.current = false;
-    const startY = window.scrollY;
-    const maxScroll = Math.max(0, document.body.scrollHeight - window.innerHeight);
-    const targetY = maxScroll;
-    const duration = 35000;
-    const startTime = performance.now();
+    const pxPerSecond = 46; // gentle, cinematic pace — tuned for the ~35s full-page pass this replaces
+    let last = performance.now();
 
     const tick = (now: number) => {
       if (autoScrollCancelledRef.current) return;
-      const elapsed = now - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      const eased = progress;
-      const nextY = startY + (targetY - startY) * eased;
+      const dt = Math.min(now - last, 100) / 1000;
+      last = now;
 
+      const maxScroll = Math.max(0, document.body.scrollHeight - window.innerHeight);
+      const nextY = Math.min(window.scrollY + pxPerSecond * dt, maxScroll);
       window.scrollTo({ top: nextY, behavior: 'auto' });
 
-      if (progress < 1) {
+      if (nextY < maxScroll) {
         autoScrollRef.current = window.requestAnimationFrame(tick);
       } else {
         autoScrollRef.current = null;
@@ -135,27 +168,66 @@ export default function Invitation() {
     if (autoScrollRef.current !== null) {
       window.cancelAnimationFrame(autoScrollRef.current);
     }
-
     autoScrollRef.current = window.requestAnimationFrame(tick);
   };
 
   useEffect(() => {
     if (stage !== 'in') return;
 
-    const handleUserScroll = () => cancelAutoScroll();
+    // Any deliberate pointer/touch/wheel input pauses auto-scroll and never
+    // restarts it on its own — the guest is now in control. Note this does
+    // NOT listen for the 'scroll' event itself, since auto-scroll causes
+    // scroll events too; listening for the gestures that cause scrolling
+    // (not scrolling itself) is what keeps this from immediately cancelling
+    // its own programmatic scroll.
+    const handlePointerInteraction = () => cancelAutoScroll();
 
-    startAutoScroll();
-    window.addEventListener('wheel', handleUserScroll, { passive: true });
-    window.addEventListener('touchstart', handleUserScroll, { passive: true });
-    window.addEventListener('pointerdown', handleUserScroll, { passive: true });
-    window.addEventListener('keydown', handleUserScroll);
+    // Keyboard acts as real navigation, not just a pause: arrow/page keys
+    // move between the 9 sections by id, same as tapping a progress dot.
+    const handleKeyNav = (event: KeyboardEvent) => {
+      cancelAutoScroll();
+      const target = event.target as HTMLElement | null;
+      if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+
+      if (event.key === 'ArrowDown' || event.key === 'PageDown') {
+        event.preventDefault();
+        goToSection(activeIndexRef.current + 1);
+      } else if (event.key === 'ArrowUp' || event.key === 'PageUp') {
+        event.preventDefault();
+        goToSection(activeIndexRef.current - 1);
+      } else if (event.key === 'Home') {
+        event.preventDefault();
+        goToSection(0);
+      } else if (event.key === 'End') {
+        event.preventDefault();
+        goToSection(sectionIds.length - 1);
+      }
+    };
+
+    // A brief pause on section 1 before the cinematic auto-scroll begins,
+    // so it reads as "the invitation is about to guide you" rather than
+    // the page moving out from under the guest the instant it appears.
+    // Reduced-motion guests never get auto-scroll at all — for them the
+    // progress dots and cue below are the only (fully sufficient) way
+    // through the 9 sections.
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const startTimer = window.setTimeout(() => {
+      if (!reduce.matches) startAutoScroll();
+    }, 1200);
+
+    window.addEventListener('wheel', handlePointerInteraction, { passive: true });
+    window.addEventListener('touchstart', handlePointerInteraction, { passive: true });
+    window.addEventListener('pointerdown', handlePointerInteraction, { passive: true });
+    window.addEventListener('keydown', handleKeyNav);
 
     return () => {
+      window.clearTimeout(startTimer);
       cancelAutoScroll();
-      window.removeEventListener('wheel', handleUserScroll);
-      window.removeEventListener('touchstart', handleUserScroll);
-      window.removeEventListener('pointerdown', handleUserScroll);
-      window.removeEventListener('keydown', handleUserScroll);
+      window.removeEventListener('wheel', handlePointerInteraction);
+      window.removeEventListener('touchstart', handlePointerInteraction);
+      window.removeEventListener('pointerdown', handlePointerInteraction);
+      window.removeEventListener('keydown', handleKeyNav);
     };
   }, [stage]);
 
@@ -177,11 +249,25 @@ export default function Invitation() {
  
     const update = () => {
       frame = 0;
-      if (reduce.matches) return;
       const vh = window.innerHeight;
       // Read every rect first, then write, so the browser lays out once per frame.
       const rects = scenes.map((el) => el.getBoundingClientRect());
- 
+
+      // Which section is "current" for the progress dots / hero cue / keyboard
+      // nav: the last one whose top has crossed the upper half of the screen.
+      // Computed from the same rects as the crossfade math below (no extra
+      // scroll listener or IntersectionObserver needed) and kept even when
+      // reduced motion skips the animation writes further down, so the dots
+      // still work for those guests.
+      let currentIndex = 0;
+      rects.forEach((r, i) => { if (r.top <= vh * 0.5) currentIndex = i; });
+      if (activeIndexRef.current !== currentIndex) {
+        activeIndexRef.current = currentIndex;
+        setActiveIndex(currentIndex);
+      }
+
+      if (reduce.matches) return;
+
       scenes.forEach((el, i) => {
         if (el.dataset.scene !== 'art') return; // live sections (.event/.venue) only act as covers
         const { top, height } = rects[i];
@@ -329,10 +415,10 @@ export default function Invitation() {
             <ArtScene id="quran78" z={2} motion="motion-still" src="/assets/pages/quran-78.jpg"
               alt="Qur'an 78:8 — And We created you in pairs. A connection written by Allah, a journey blessed by dua, a future built on love and faith." />
  
-            <ArtScene z={3} motion="motion-lively" src="/assets/pages/story-celebration.jpg"
+            <ArtScene id="celebration" z={3} motion="motion-lively" src="/assets/pages/story-celebration.jpg"
               alt="Moments that made our story — Saniya and Hasnain amid sparklers at their Nikkah. From Nikkah to a new chapter... Alhamdulillah." />
  
-            <ArtScene z={4} motion="motion-slow" src="/assets/pages/story-detail.jpg"
+            <ArtScene id="detail" z={4} motion="motion-slow" src="/assets/pages/story-detail.jpg"
               alt="Two hands, one journey, always together — mehndi-adorned hands with a flower bouquet." />
  
             <section className="event reveal" id="event" data-scene="live" style={{ zIndex: 5 }}>
@@ -390,12 +476,43 @@ export default function Invitation() {
             <ArtScene id="dua" z={8} motion="motion-still" src="/assets/pages/dua-30-21.jpg"
               alt="A dua for their journey — Surah Ar-Rum 30:21: And of His signs is that He created for you from yourselves mates that you may find tranquillity in them, and He placed between you affection and mercy. Indeed, in that are signs for a people who give thought." />
  
-            <ArtScene z={9} motion="motion-still" src="/assets/pages/closing.jpg"
+            <ArtScene id="closing" z={9} motion="motion-still" src="/assets/pages/closing.jpg"
               alt="Thank you, Saniya &amp; Hasnain, 27.09.2026. With love and duas for our beautiful journey ahead. Jazakallahu khairan for being a part of our story." />
           </>
         )}
       </main>
- 
+
+      {/* First-screen discoverability + always-available manual navigation.
+          These render as soon as the invitation is open, independent of
+          whether auto-scroll ever starts or works, so a guest can never
+          reasonably conclude section 1 is the whole invitation. */}
+      {stage === 'in' && (
+        <nav className="section-nav" aria-label="Invitation sections">
+          <span className="section-nav-count" aria-hidden="true">{activeIndex + 1} / {sectionIds.length}</span>
+          <ol>
+            {sectionIds.map((id, i) => (
+              <li key={id}>
+                <button
+                  type="button"
+                  className={i === activeIndex ? 'active' : ''}
+                  aria-label={`Go to section ${i + 1} of ${sectionIds.length}`}
+                  aria-current={i === activeIndex ? 'true' : undefined}
+                  onClick={() => goToSection(i)}
+                />
+              </li>
+            ))}
+          </ol>
+        </nav>
+      )}
+
+      {stage === 'in' && activeIndex === 0 && (
+        <div className="scroll-cue" aria-hidden="true">
+          <span className="scroll-cue-count">1 / {sectionIds.length}</span>
+          <span className="scroll-cue-chevron">↓</span>
+          <span className="scroll-cue-text">Scroll to continue</span>
+        </div>
+      )}
+
       {stage === 'opening' && (
         <div className={`interstitial visible ${interstitialFading ? 'fade-out' : ''}`} aria-hidden="true">
           <img src="/assets/pages/opening.jpg" alt="" />

@@ -191,6 +191,38 @@ body{margin:0;background:var(--deep);color:var(--ivory);font-family:var(--sans);
 .action-btn.solid{border:1px solid var(--gold);background:linear-gradient(135deg,var(--gold2),var(--gold));color:var(--deep)}
 .action-btn.solid:hover{filter:brightness(1.06)}
  
+/* ============ SCROLL CUE (first-screen discoverability) ============ */
+/* Lives outside the scene stack (fixed to the viewport), so it renders the
+   instant section 1 is on screen regardless of whether the choreography
+   loop, IntersectionObserver-equivalent index tracking, or auto-scroll
+   itself ever runs. Only shown while section 1 is active (see --activeIndex
+   logic in Invitation.tsx), so it never lingers once the guest has moved on. */
+.scroll-cue{position:fixed;left:50%;bottom:calc(28px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);
+  z-index:60;display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:none;
+  color:var(--gold2);text-shadow:0 1px 6px rgba(0,0,0,.5);
+  animation:cueFade .8s var(--ease) .6s both}
+.scroll-cue-count{font:600 11px var(--serif);letter-spacing:.32em;color:var(--gold2);opacity:.9}
+.scroll-cue-chevron{font-size:20px;line-height:1;animation:cueBounce 1.8s ease-in-out infinite}
+.scroll-cue-text{font:500 10px var(--sans);letter-spacing:.24em;text-transform:uppercase;opacity:.85}
+@keyframes cueFade{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+@keyframes cueBounce{0%,100%{transform:translateY(0)}50%{transform:translateY(7px)}}
+
+/* ============ SECTION PROGRESS / MANUAL NAV ============ */
+/* Reliable fallback required by the brief: works identically whether
+   auto-scroll is running, has been paused by the guest, or never started
+   at all. Each dot maps to a section id (see sectionIds in Invitation.tsx)
+   and scrolls there directly rather than via a calculated pixel offset. */
+.section-nav{position:fixed;z-index:60;right:calc(14px + env(safe-area-inset-right,0px));top:50%;transform:translateY(-50%);
+  display:flex;flex-direction:column;align-items:center;gap:10px}
+.section-nav-count{font:600 10px var(--serif);letter-spacing:.18em;color:var(--gold2);opacity:.75;pointer-events:none}
+.section-nav ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:9px}
+.section-nav li{display:flex}
+.section-nav button{width:8px;height:8px;border-radius:50%;padding:0;border:1px solid rgba(225,199,143,.55);
+  background:rgba(246,240,229,.15);cursor:pointer;transition:background .3s var(--ease),transform .3s var(--ease),border-color .3s var(--ease)}
+.section-nav button:hover{border-color:var(--gold2)}
+.section-nav button.active{background:var(--gold2);border-color:var(--gold2);transform:scale(1.35)}
+.section-nav button:focus-visible{outline:2px solid var(--gold2);outline-offset:3px}
+
 /* ============ GENERIC REVEAL ============ */
 .reveal{opacity:0;transform:translateY(18px);transition:opacity .9s var(--ease),transform .9s var(--ease)}
 .reveal.visible{opacity:1;transform:none}
@@ -216,5 +248,9 @@ body{margin:0;background:var(--deep);color:var(--ivory);font-family:var(--sans);
   .interstitial{transition:none}
   .calendar-card,.countdown-card,.venue-copy>p,.landmark,.map-card,.actions{
     opacity:1!important;transform:none!important;transition:none!important}
+  /* Cue and dots stay fully functional, just without the bounce/fade motion. */
+  .scroll-cue{animation:none;opacity:1}
+  .scroll-cue-chevron{animation:none}
+  .section-nav button.active{transform:none}
 }
 button:focus-visible,a:focus-visible{outline:2px solid var(--gold2);outline-offset:4px}
