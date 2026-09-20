@@ -54,6 +54,8 @@ export default function Invitation() {
   const [playing, setPlaying] = useState(false);
   const [countdown, setCountdown] = useState({ days: '--', hours: '--', minutes: '--', seconds: '--', after: false });
   const audioRef = useRef<HTMLAudioElement>(null);
+  const autoScrollRef = useRef<number | null>(null);
+  const autoScrollCancelledRef = useRef(false);
   const calendarDays = useMemo(buildCalendarDays, []);
  
   useEffect(() => {
@@ -96,6 +98,67 @@ export default function Invitation() {
   // moves the page, so scrolling stays fully native. Every value is a pure
   // function of the current rects, so fast flicks and scrolling back up can't
   // leave a scene stuck half-faded.
+  const cancelAutoScroll = () => {
+    if (autoScrollRef.current !== null) {
+      window.cancelAnimationFrame(autoScrollRef.current);
+      autoScrollRef.current = null;
+    }
+    autoScrollCancelledRef.current = true;
+  };
+
+  const startAutoScroll = () => {
+    if (typeof window === 'undefined') return;
+
+    autoScrollCancelledRef.current = false;
+    const startY = window.scrollY;
+    const maxScroll = Math.max(0, document.body.scrollHeight - window.innerHeight);
+    const targetY = maxScroll;
+    const duration = 35000;
+    const startTime = performance.now();
+
+    const tick = (now: number) => {
+      if (autoScrollCancelledRef.current) return;
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const eased = progress;
+      const nextY = startY + (targetY - startY) * eased;
+
+      window.scrollTo({ top: nextY, behavior: 'auto' });
+
+      if (progress < 1) {
+        autoScrollRef.current = window.requestAnimationFrame(tick);
+      } else {
+        autoScrollRef.current = null;
+      }
+    };
+
+    if (autoScrollRef.current !== null) {
+      window.cancelAnimationFrame(autoScrollRef.current);
+    }
+
+    autoScrollRef.current = window.requestAnimationFrame(tick);
+  };
+
+  useEffect(() => {
+    if (stage !== 'in') return;
+
+    const handleUserScroll = () => cancelAutoScroll();
+
+    startAutoScroll();
+    window.addEventListener('wheel', handleUserScroll, { passive: true });
+    window.addEventListener('touchstart', handleUserScroll, { passive: true });
+    window.addEventListener('pointerdown', handleUserScroll, { passive: true });
+    window.addEventListener('keydown', handleUserScroll);
+
+    return () => {
+      cancelAutoScroll();
+      window.removeEventListener('wheel', handleUserScroll);
+      window.removeEventListener('touchstart', handleUserScroll);
+      window.removeEventListener('pointerdown', handleUserScroll);
+      window.removeEventListener('keydown', handleUserScroll);
+    };
+  }, [stage]);
+
   useEffect(() => {
     if (stage === 'cover') return;
     const scenes = Array.from(document.querySelectorAll<HTMLElement>('main > [data-scene]'));
