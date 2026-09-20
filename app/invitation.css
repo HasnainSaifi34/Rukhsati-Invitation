@@ -1,0 +1,220 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,500&family=DM+Sans:wght@300;400;500;600&display=swap');
+ 
+/* ============ TOKENS ============ */
+:root{
+  --emerald:#073C35; --deep:#041F1C; --emerald-mid:#0b4a41;
+  --ivory:#F6F0E5; --gold:#C7A66A; --gold2:#E1C78F;
+  --ink:#17312d; --muted:#b9c8c1;
+  --serif:'Cormorant Garamond',Georgia,serif;
+  --sans:'DM Sans',Arial,sans-serif;
+  --ease:cubic-bezier(.22,.75,.24,1);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;background:var(--deep)}
+body{margin:0;background:var(--deep);color:var(--ivory);font-family:var(--sans);font-weight:300;overflow-x:hidden}
+ 
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+  clip:rect(0,0,0,0);white-space:nowrap;border:0}
+ 
+.grain{position:fixed;inset:0;pointer-events:none;z-index:100;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 160 160' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.18'/%3E%3C/svg%3E");
+  opacity:.02}
+ 
+/* ============ TOP BAR (music only) ============ */
+.topbar{position:fixed;z-index:80;top:calc(18px + env(safe-area-inset-top,0px));right:18px;left:auto;
+  display:flex;pointer-events:none}
+.icon-btn{pointer-events:auto;width:42px;height:42px;border:1px solid rgba(225,199,143,.5);border-radius:50%;
+  background:rgba(4,31,28,.58);backdrop-filter:blur(12px);color:var(--gold2);font:500 16px var(--sans);cursor:pointer;
+  transition:transform .3s var(--ease),background .3s}
+.icon-btn:hover{transform:scale(1.06);background:rgba(199,166,106,.22)}
+ 
+/* ============ FULL-BLEED STATIC PAGES ============ */
+/* Sections with no dynamic data are the actual designed artwork, shown
+   as a single full-bleed image rather than reconstructed with CSS/text -
+   this keeps every crop, face position and typographic detail exactly
+   as designed. */
+.static-page{position:relative;width:100%;min-height:100vh;min-height:100svh;overflow:hidden;display:block}
+.static-page.cover-page{cursor:pointer;border:0;padding:0;margin:0;background:none;appearance:none}
+.static-page.cover-page img{width:100%;height:100%;min-height:100vh;min-height:100svh;object-fit:cover;display:block}
+.static-page.cover-page:focus-visible{outline:2px solid var(--gold2);outline-offset:-4px}
+ 
+/* ============ SCROLL SCENES (stacked sticky crossfade) ============ */
+/* Every artwork page is a full-screen "scene" that PINS to the top of the
+   screen (position: sticky) while the next scene - later in the document,
+   so higher z-index (set inline in Invitation.tsx) - slides up and covers it.
+   Native scrolling is untouched: nothing intercepts wheel/touch input.
+ 
+   Timeline of one scene, in scroll distance:
+     arrive  (100svh) -> rises into place, top edge softened by a veil
+     hold    (--dwell) -> pinned and perfectly still: the breathing room
+     covered (100svh) -> next scene rises over it while its artwork dims
+   Invitation.tsx publishes the progress of each phase as custom properties:
+     --p      0..1 whole-life progress   (drives the Ken Burns motion)
+     --enter  0..1 rising into place     (drives the top-edge veil)
+     --cover  0..1 being covered         (drives the outgoing dim)
+ 
+   Per-scene tuning knobs (set by the .motion-* classes below):
+     --k      extra scale gained over the scene's life (0.02 = +2%)
+     --dy     total vertical drift over the life, in px (keep it to a few px)
+     --base   resting scale; a hair above 1 hides the edges while drifting
+     --cs     extra scale added while being covered (depth as it recedes)
+     --dim    how much the outgoing artwork dims (0.6 -> ends at 40% opacity)
+     --dwell  stillness before the next scene starts to rise */
+.scene{
+  --k:.02; --dy:0px; --base:1; --cs:0; --dim:.6; --dwell:28svh;
+  position:sticky;top:0;
+  height:100vh;height:100svh;min-height:0;
+  margin-bottom:var(--dwell);
+  background:var(--deep);isolation:isolate}
+.scene:last-child{margin-bottom:0}
+@supports not (height:1svh){.scene{--dwell:28vh}}
+ 
+/* Soft leading edge: a deep-green veil that dissolves as the scene settles,
+   so it feathers over the outgoing scene (or the .event/.venue background
+   above it) instead of arriving with a hard line. Gone at rest. */
+.scene::after{content:"";position:absolute;left:0;right:0;top:0;height:24vh;height:24svh;z-index:2;pointer-events:none;
+  background:linear-gradient(to bottom,rgba(4,31,28,.95),rgba(4,31,28,0));
+  opacity:calc(1 - var(--enter,1))}
+ 
+/* The dimmable layer: blurred fill + sharp artwork. Opaque .scene background
+   sits behind it, so dimming fades toward deep green - earlier scenes
+   pinned underneath can never ghost through. */
+.scene-media{position:absolute;inset:0;opacity:calc(1 - var(--cover,0) * var(--dim))}
+.scene img{display:block}
+/* Blurred copy of the artwork fills any letterbox space (wide phones,
+   tablets, desktop) so the layout never shows flat bars. */
+.scene-plate{position:absolute;left:-6%;top:-6%;width:112%;height:112%;object-fit:cover;filter:blur(26px) saturate(1.1)}
+/* The artwork is FITTED, not cropped: every page has baked-in text close to
+   its edges, and mobile browser toolbars change the visible height. The box
+   is sized to the artwork itself (auto size, capped to the screen) so the
+   feathered mask below lands exactly on its edge. */
+.scene-art{--edge:linear-gradient(to right,transparent 0,#000 3.5%,#000 96.5%,transparent 100%);
+  position:absolute;inset:0;margin:auto;
+  width:auto;height:auto;max-width:100%;max-height:100%;object-fit:contain;
+  -webkit-mask-image:var(--edge);mask-image:var(--edge); /* feathers into the blurred fill instead of a hard seam */
+  transform-origin:var(--origin,50% 50%);
+  transform:translate3d(0,calc((var(--p,0) - .5) * var(--dy)),0)
+    scale(calc(var(--base) + var(--p,0) * var(--k) + var(--cover,0) * var(--cs)))}
+/* Screens taller than the artwork letterbox top/bottom instead of left/right. */
+@media(max-aspect-ratio:51/100){
+  .scene-art{--edge:linear-gradient(to bottom,transparent 0,#000 3.5%,#000 96.5%,transparent 100%)}}
+/* Photo scenes may fill the screen edge to edge on phones (only the sides
+   trim, never the top/bottom text); on wide screens they fit like the rest. */
+.scene.fit-cover .scene-art{width:100%;height:100%;object-fit:cover;-webkit-mask-image:none;mask-image:none}
+@media(min-aspect-ratio:4/5){
+  .scene.fit-cover .scene-art{width:auto;height:auto;object-fit:contain;-webkit-mask-image:var(--edge);mask-image:var(--edge)}}
+.scene[data-active] .scene-media,.scene[data-active] .scene-art{will-change:transform,opacity}
+ 
+/* Motion hierarchy - HIGH is reserved for the envelope/intro (cover ->
+   opening -> hero). Scenes are MEDIUM (photo scenes) or LOW/STILL. */
+.motion-hero{--k:.04;--dy:-12px;--base:1.012;--cs:.02;--origin:50% 40%;--dwell:26svh}   /* slow push-in with a faint lift, toward the faces */
+.motion-lively{--k:.055;--dy:-8px;--base:1.01;--cs:.025;--dwell:26svh}                     /* fireworks: the quickest scene */
+.motion-slow{--k:.03;--dy:8px;--base:1.01;--cs:.015;--dwell:30svh}                         /* hands: slow and deliberate */
+.motion-still{--k:.015;--dy:0px;--base:1;--cs:0;--dwell:44svh}                             /* quran / families / dua / closing: a pause */
+@supports not (height:1svh){.motion-hero,.motion-lively{--dwell:26vh}.motion-slow{--dwell:30vh}.motion-still{--dwell:44vh}}
+ 
+/* The two live sections slide over the pinned scene before them, so they need
+   a stacking order (inline z-index) and a soft shadow on their leading edge. */
+.event,.venue{position:relative;box-shadow:0 -28px 56px -18px rgba(0,0,0,.55)}
+ 
+/* Opening interstitial: a brief full-screen overlay shown between tapping
+   the cover and the hero settling in, matching the "opening your
+   invitation" artwork. */
+.interstitial{position:fixed;inset:0;z-index:70;opacity:0;transition:opacity .7s var(--ease);pointer-events:none}
+.interstitial.visible{opacity:1}
+.interstitial.fade-out{opacity:0}
+.interstitial img{width:100%;height:100%;object-fit:cover;display:block}
+ 
+/* ============ SAVE THE DATE / COUNTDOWN (dynamic) ============ */
+.event{padding:100px 22px 90px;background:radial-gradient(circle at 50% 10%,#0d5148 0,var(--emerald) 45%,var(--deep) 100%);
+  position:relative}
+.event-inner{max-width:480px;margin:auto;text-align:center}
+.section-label{font:500 11px/1.6 var(--sans);letter-spacing:.32em;color:var(--gold2)}
+.event-inner .ornament{color:var(--gold);font-size:16px;margin-bottom:14px}
+.event-inner .divider-flourish{width:120px;height:1px;background:linear-gradient(90deg,transparent,var(--gold),transparent);
+  margin:16px auto 22px}
+.calendar-card{margin-top:38px;border:1px solid var(--gold);border-radius:26px 26px 14px 14px;
+  padding:26px 20px 22px;background:rgba(199,166,106,.03);
+  opacity:0;transform:translateY(16px);transition:opacity .9s var(--ease),transform .9s var(--ease)}
+.reveal.visible .calendar-card{opacity:1;transform:translateY(0)}
+.calendar-head{font:600 20px var(--serif);letter-spacing:.08em;color:var(--ivory)}
+.calendar-head b{color:var(--gold2);font-weight:600}
+.weekdays,.days{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.weekdays{margin-top:18px;color:var(--gold);font:600 11px var(--serif);letter-spacing:.05em}
+.days{margin-top:8px}
+.day{aspect-ratio:1;display:grid;place-items:center;color:var(--ivory);font:400 15px var(--serif);border-radius:50%}
+.day.muted{visibility:hidden}
+.day.active{background:var(--gold2);color:var(--deep);font-weight:600}
+.reveal.visible .day.active{animation:calendarPop .7s var(--ease) .5s both}
+@keyframes calendarPop{0%{box-shadow:0 0 0 0 rgba(199,166,106,0);transform:scale(.7)}55%{transform:scale(1.18)}100%{box-shadow:0 0 0 6px rgba(199,166,106,.25);transform:scale(1)}}
+.event-date-line{margin-top:20px;color:var(--ivory);font:600 17px/1.5 var(--serif);letter-spacing:.02em}
+.event-time-line{color:var(--gold2);font:600 26px var(--serif);margin-top:4px}
+.countdown-card{margin-top:26px;border:1px solid rgba(199,166,106,.5);border-radius:14px;padding:20px 8px;
+  opacity:0;transform:translateY(16px);transition:opacity .9s var(--ease) .1s,transform .9s var(--ease) .1s}
+.reveal.visible .countdown-card{opacity:1;transform:translateY(0)}
+.countdown-card .section-label{display:block;margin-bottom:16px;color:var(--gold)}
+.countdown{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+.countdown div{padding:0 2px}
+.countdown strong{display:block;font:600 30px var(--serif);color:var(--gold2);font-variant-numeric:tabular-nums}
+.countdown span{font:500 8px var(--sans);letter-spacing:.12em;color:var(--muted)}
+.after-event{grid-template-columns:1fr}
+.after-event .after-message{grid-column:1/-1;padding:10px 0}
+.after-message strong{font:600 34px var(--serif);color:var(--gold2);display:block}
+.after-message span{font:500 10px var(--sans);letter-spacing:.2em;color:var(--muted)}
+.rsvp-note{margin-top:34px;color:var(--muted);font:400 italic 16px var(--serif)}
+ 
+/* ============ VENUE (dynamic: map + actions) ============ */
+.venue{padding:100px 22px 90px;background:radial-gradient(circle at 50% 0%,#0d5148 0,var(--emerald) 45%,var(--deep) 100%)}
+.venue-inner{max-width:520px;margin:auto;text-align:center}
+.venue-inner .section-label{display:block}
+.venue-inner h2{font:600 clamp(48px,13vw,80px)/.85 var(--serif);margin:14px 0 22px;color:var(--gold2);letter-spacing:.03em}
+.venue-copy>p{font:400 19px/1.6 var(--serif);color:var(--ivory);margin:0;
+  opacity:0;transform:translateY(12px);transition:opacity .8s var(--ease),transform .8s var(--ease)}
+.reveal.visible .venue-copy>p{opacity:1;transform:translateY(0)}
+.landmark{margin:26px auto 0;display:inline-flex;align-items:center;gap:8px;color:var(--gold2);
+  font:600 13px var(--sans);letter-spacing:.08em;
+  opacity:0;transform:translateY(12px);transition:opacity .8s var(--ease) .16s,transform .8s var(--ease) .16s}
+.reveal.visible .landmark{opacity:1;transform:translateY(0)}
+.landmark span{opacity:.8}
+.map-card{position:relative;margin-top:28px;min-height:320px;border:1px solid var(--gold);border-radius:16px;
+  overflow:hidden;opacity:0;transform:translateY(16px) scale(.98);
+  transition:opacity .9s var(--ease) .3s,transform .9s var(--ease) .3s}
+.reveal.visible .map-card{opacity:1;transform:translateY(0) scale(1)}
+.map-card iframe{width:100%;height:100%;min-height:320px;border:0}
+.actions{display:grid;gap:12px;margin-top:22px;
+  opacity:0;transform:translateY(12px);transition:opacity .8s var(--ease) .45s,transform .8s var(--ease) .45s}
+.reveal.visible .actions{opacity:1;transform:translateY(0)}
+.action-btn{display:block;text-align:center;text-decoration:none;border-radius:999px;
+  padding:15px 18px;letter-spacing:.13em;font:600 11px var(--sans);cursor:pointer;transition:.25s}
+.action-btn.outline{border:1px solid var(--gold);background:transparent;color:var(--gold2)}
+.action-btn.outline:hover{background:rgba(199,166,106,.12)}
+.action-btn.solid{border:1px solid var(--gold);background:linear-gradient(135deg,var(--gold2),var(--gold));color:var(--deep)}
+.action-btn.solid:hover{filter:brightness(1.06)}
+ 
+/* ============ GENERIC REVEAL ============ */
+.reveal{opacity:0;transform:translateY(18px);transition:opacity .9s var(--ease),transform .9s var(--ease)}
+.reveal.visible{opacity:1;transform:none}
+ 
+/* ============ RESPONSIVE ============ */
+@media(min-width:760px){
+  .event-inner{max-width:520px}
+  .actions{grid-template-columns:1fr 1fr}
+}
+ 
+/* ============ ACCESSIBILITY / MOTION ============ */
+@media(prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  .reveal{opacity:1;transform:none;transition:none}
+  /* Scenes fall back to a plain sequential layout: no sticky stacking, no
+     scale/translate, no dimming - each artwork simply shows at its natural size. */
+  .scene{position:relative;height:auto;min-height:0;margin-bottom:0;overflow:visible}
+  .scene::after,.scene .scene-plate{display:none}
+  .scene-media{position:static;opacity:1!important}
+  .scene-art,.scene.fit-cover .scene-art{position:static;margin:0;width:100%;max-width:none;max-height:none;height:auto;object-fit:fill;
+    -webkit-mask-image:none;mask-image:none;transform:none!important}
+  .event,.venue{box-shadow:none}
+  .interstitial{transition:none}
+  .calendar-card,.countdown-card,.venue-copy>p,.landmark,.map-card,.actions{
+    opacity:1!important;transform:none!important;transition:none!important}
+}
+button:focus-visible,a:focus-visible{outline:2px solid var(--gold2);outline-offset:4px}
