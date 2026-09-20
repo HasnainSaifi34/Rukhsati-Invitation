@@ -191,18 +191,36 @@ body{margin:0;background:var(--deep);color:var(--ivory);font-family:var(--sans);
 .action-btn.solid{border:1px solid var(--gold);background:linear-gradient(135deg,var(--gold2),var(--gold));color:var(--deep)}
 .action-btn.solid:hover{filter:brightness(1.06)}
  
-/* ============ SCROLL CUE (first-screen discoverability) ============ */
-/* Lives outside the scene stack (fixed to the viewport), so it renders the
-   instant section 1 is on screen, independent of whether auto-scroll itself
-   ever runs. Fades out once the guest has scrolled even a little. */
-.scroll-cue{position:fixed;left:50%;bottom:calc(28px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);
-  z-index:60;display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:none;
+/* ============ SCROLL CUE + SECTION PROGRESS (navigation aids) ============ */
+/* Both live outside the scene stack (fixed to the viewport) and are shown in
+   EVERY motion mode: they are how a guest knows there are more sections and
+   how far along they are, whether or not auto-scroll ever runs.
+   .scroll-cue       "Scroll to continue" on the opening section. Sits low and
+                     mostly opaque so it stands in for the small "SCROLL" mark
+                     baked into the hero artwork instead of stacking on top of
+                     it. Fades out (.is-hidden) once the guest is on section 2+,
+                     and returns if they come back to the top.
+   .section-progress quiet "3 / 9" pill, top-left (the music button is top-right). */
+.scroll-cue{position:fixed;left:50%;bottom:calc(10px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);
+  z-index:60;display:flex;flex-direction:column;align-items:center;gap:4px;pointer-events:none;
+  width:max-content;padding:10px 22px 12px;border:1px solid rgba(225,199,143,.4);border-radius:26px;
+  background:rgba(4,31,28,.9);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
   color:var(--gold2);text-shadow:0 1px 6px rgba(0,0,0,.5);
   animation:cueFade .8s var(--ease) .6s both}
+.scroll-cue.is-hidden{animation:cueHide .45s var(--ease) both}
 .scroll-cue-chevron{font-size:20px;line-height:1;animation:cueBounce 1.8s ease-in-out infinite}
-.scroll-cue-text{font:500 10px var(--sans);letter-spacing:.24em;text-transform:uppercase;opacity:.85}
+.scroll-cue-text{font:500 10px var(--sans);letter-spacing:.24em;text-transform:uppercase;opacity:.85;white-space:nowrap}
 @keyframes cueFade{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+@keyframes cueHide{from{opacity:1;transform:translateX(-50%) translateY(0)}to{opacity:0;transform:translateX(-50%) translateY(8px);visibility:hidden}}
 @keyframes cueBounce{0%,100%{transform:translateY(0)}50%{transform:translateY(7px)}}
+ 
+.section-progress{position:fixed;z-index:80;top:calc(22px + env(safe-area-inset-top,0px));left:calc(18px + env(safe-area-inset-left,0px));
+  height:34px;display:flex;align-items:center;padding:0 14px;pointer-events:none;
+  border:1px solid rgba(225,199,143,.35);border-radius:999px;
+  background:rgba(4,31,28,.58);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  color:var(--gold2);font:600 14px var(--serif);letter-spacing:.14em;font-variant-numeric:tabular-nums;
+  animation:progressFade .8s var(--ease) .6s both}
+@keyframes progressFade{from{opacity:0}to{opacity:1}}
  
 /* ============ GENERIC REVEAL ============ */
 .reveal{opacity:0;transform:translateY(18px);transition:opacity .9s var(--ease),transform .9s var(--ease)}
@@ -229,8 +247,10 @@ body{margin:0;background:var(--deep);color:var(--ivory);font-family:var(--sans);
   .interstitial{transition:none}
   .calendar-card,.countdown-card,.venue-copy>p,.landmark,.map-card,.actions{
     opacity:1!important;transform:none!important;transition:none!important}
-  /* Cue and dots stay fully functional, just without the bounce/fade motion. */
+  /* Cue and progress pill stay fully functional, just without the bounce/fade motion. */
   .scroll-cue{animation:none;opacity:1}
+  .scroll-cue.is-hidden{animation:none;opacity:0;visibility:hidden}
   .scroll-cue-chevron{animation:none}
+  .section-progress{animation:none;opacity:1}
 }
 button:focus-visible,a:focus-visible{outline:2px solid var(--gold2);outline-offset:4px}

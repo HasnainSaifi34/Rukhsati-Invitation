@@ -23,6 +23,22 @@ function smoothstep(a: number, b: number, x: number) {
 }
  
 /**
+ * Temporary development logging for the auto-scroll lifecycle.
+ *   - `next dev`: always on.
+ *   - production build: silent, unless the page is opened with `?debugScroll`
+ *     (handy for checking a real device without redeploying).
+ * Per-frame logging is throttled, so it never floods the console. To strip it
+ * out completely, delete these two helpers and every scrollLog(...) call.
+ */
+function scrollDebugOn() {
+  if (typeof window === 'undefined') return false;
+  return process.env.NODE_ENV !== 'production' || /[?&]debugScroll\b/.test(window.location.search);
+}
+function scrollLog(...args: unknown[]) {
+  if (scrollDebugOn()) console.log('[invitation:autoscroll]', ...args);
+}
+ 
+/**
  * One full-bleed artwork "scene". Scenes are stacked with position: sticky (see
  * invitation.css), so each one pins to the top of the screen while the next
  * scene slides up over it. The scroll loop below writes three custom
@@ -53,10 +69,12 @@ export default function Invitation() {
   const [interstitialFading, setInterstitialFading] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [countdown, setCountdown] = useState({ days: '--', hours: '--', minutes: '--', seconds: '--', after: false });
-  // Shows the "scroll to continue" hint on the first screen until the guest
-  // scrolls even slightly (by hand or via auto-scroll) — a lightweight,
-  // self-contained signal, independent of the auto-scroll mechanism itself.
-  const [showHint, setShowHint] = useState(true);
+  // Which section (0-based) is currently "on stage", and how many there are.
+  // Drives the "1 / 9" progress pill and the first-screen "Scroll to continue"
+  // cue. Both are plain navigation aids that render in every motion mode and
+  // don't depend on auto-scroll in any way.
+  const [sectionIndex, setSectionIndex] = useState(0);
+  const [sectionTotal, setSectionTotal] = useState(0);
   const audioRef = useRef<HTMLAudioElement>(null);
   const autoScrollRef = useRef<number | null>(null);
   const autoScrollCancelledRef = useRef(false);
@@ -96,78 +114,138 @@ export default function Invitation() {
     };
   }, [stage]);
  
-  // Scene choreography. Reads where every scene sits on screen and publishes
-  // --p / --enter / --cover on the artwork scenes (see ArtScene). It only
-  // *reads* scroll position; it never intercepts wheel/touch events and never
-  // moves the page, so scrolling stays fully native. Every value is a pure
-  // function of the current rects, so fast flicks and scrolling back up can't
-  // leave a scene stuck half-faded.
-  const cancelAutoScroll = () => {
+  useEffect(() => {
+    scrollLog('invitation stage →', stage);
+  }, [stage]);
+ 
+  // ---- Auto-scroll: an enhancement, never a dependency ---------------------
+  // Manual scrolling is always native and always works. This loop only nudges
+  // the page forward for guests who have NOT asked for reduced motion.
+  //
+  // Lifecycle:  stage 'in' -> startup timer -> startAutoScroll() -> ONE rAF
+  // loop -> scrollTop grows -> scenes progress (scroll listener in the
+  // choreography effect) -> maxScroll reached -> cancelAutoScroll('reached-bottom').
+  // Every way out of the loop goes through cancelAutoScroll(reason), which is
+  // also where the stop reason gets logged.
+  const getScrollingElement = () => document.scrollingElement || document.documentElement;
+ 
+  // Scrollable distance, re-measured on every frame (never computed once and
+  // trusted), so the loop stays correct if the page height changes mid-scroll
+  // (images finishing layout, a font swap, an orientation change) and can
+  // never overshoot the true bottom. scrollHeight - clientHeight is the
+  // spec's definition of the largest legal scroll offset.
+  const getMaxScroll = () => {
+    const el = getScrollingElement();
+    return Math.max(0, el.scrollHeight - el.clientHeight);
+  };
+ 
+  const cancelAutoScroll = (reason: string) => {
+    const wasRunning = autoScrollRef.current !== null;
     if (autoScrollRef.current !== null) {
       window.cancelAnimationFrame(autoScrollRef.current);
       autoScrollRef.current = null;
     }
     autoScrollCancelledRef.current = true;
+    // Hand scroll-behavior back to the stylesheet (see startAutoScroll).
+    document.documentElement.style.removeProperty('scroll-behavior');
+    if (wasRunning && scrollDebugOn()) {
+      scrollLog('STOP —', reason, { scrollTop: Math.round(getScrollingElement().scrollTop), maxScroll: getMaxScroll() });
+    }
   };
  
-  // Auto-scroll nudges the page forward a little every frame via a plain
-  // constant speed, with the scrollable distance re-measured fresh on every
-  // frame (never computed once and trusted) — so it keeps working correctly
-  // if the page's height changes mid-scroll (images finishing layout, a
-  // font swap, an orientation change) and can never overshoot past the true
-  // bottom. The per-frame delta is clamped so that if the tab was
-  // backgrounded/throttled and rAF pauses for a while, resuming doesn't
-  // suddenly snap the page a huge distance.
-  //
-  // Critically, each frame's nudge is applied by setting `scrollTop`
-  // directly rather than calling `scrollTo()`/`scrollBy()`. Per the CSSOM
-  // View spec, those APIs' default ("auto") behavior explicitly defers to
-  // the element's CSS `scroll-behavior` — and this page sets
-  // `html{scroll-behavior:smooth}`. That means a `scrollTo` call every
-  // ~16ms was restarting a smooth-scroll animation toward a target only a
-  // few pixels ahead of the last one, before the previous animation had
-  // time to settle. Several mobile browsers respond to that "perpetually
-  // restarted" pattern by barely moving the page at all — visually
-  // indistinguishable from auto-scroll doing nothing — even though the
-  // exact same loop looked fine on desktop. Setting `scrollTop` is always
-  // an immediate jump, completely unaffected by `scroll-behavior`, so it
-  // can't fight itself like that on any browser.
-  const getScrollingElement = () => document.scrollingElement || document.documentElement;
- 
-  const getMaxScroll = () => Math.max(0, getScrollingElement().scrollHeight - window.innerHeight);
- 
+  // Each frame nudges the page by setting `scrollTop` directly. Two details
+  // matter:
+  //  1. scrollTop writes are NOT exempt from CSS `scroll-behavior`. This page
+  //     sets `html{scroll-behavior:smooth}` (when the guest hasn't asked for
+  //     reduced motion), and measured in Chromium that makes every per-frame
+  //     write restart a smooth-scroll animation: the loop crawls and stutters
+  //     (~90-170px/s instead of 220). So for the life of the loop
+  //     `scroll-behavior:auto` is applied inline on <html>, and removed again
+  //     by cancelAutoScroll().
+  //  2. The loop keeps its own fractional position (`pos`) instead of
+  //     re-reading scrollTop every frame, because browsers round scrollTop to
+  //     device pixels and a sub-pixel nudge could otherwise round away to
+  //     nothing on high-refresh screens. It also doubles as the "did somebody
+  //     else move the page?" check: if scrollTop isn't where the loop left it
+  //     (scrollbar drag, find-in-page, an anchor jump…) the guest is in
+  //     control and the loop steps aside rather than fighting them.
+  // The per-frame delta is clamped so that if the tab was backgrounded and
+  // rAF paused for a while, resuming doesn't snap the page a huge distance.
   const startAutoScroll = () => {
     if (typeof window === 'undefined') return;
  
-    autoScrollCancelledRef.current = false;
-    const pxPerSecond = 220; // full first-to-last pass in roughly 30-40s depending on content height
-    let last = performance.now();
+    // One loop, ever. Never stack a second requestAnimationFrame chain.
+    if (autoScrollRef.current !== null) {
+      scrollLog('startAutoScroll() ignored — a loop is already running');
+      return;
+    }
+ 
     const el = getScrollingElement();
+    const pxPerSecond = 220; // full first-to-last pass in roughly 30-40s depending on content height
+    const tolerance = 3; // px of disagreement allowed between `pos` and the real scrollTop
+    let pos = el.scrollTop;
+    let last = performance.now();
+    let frames = 0;
+    let lastLoggedAt = -Infinity;
+ 
+    autoScrollCancelledRef.current = false;
+    document.documentElement.style.scrollBehavior = 'auto';
+    scrollLog('startAutoScroll()', { scrollTop: Math.round(pos), maxScroll: getMaxScroll(), pxPerSecond });
  
     const tick = (now: number) => {
       if (autoScrollCancelledRef.current) return;
-      const dt = Math.min(now - last, 100) / 1000;
+ 
+      if (Math.abs(el.scrollTop - pos) > tolerance) {
+        cancelAutoScroll('page moved by something else (scrollbar / find / anchor jump)');
+        return;
+      }
+ 
+      const dt = Math.min(Math.max(now - last, 0), 100) / 1000;
       last = now;
  
       const maxScroll = getMaxScroll();
-      const nextY = Math.min(el.scrollTop + pxPerSecond * dt, maxScroll);
-      el.scrollTop = nextY;
+      pos = Math.min(pos + pxPerSecond * dt, maxScroll);
+      el.scrollTop = pos;
+      frames += 1;
  
-      if (nextY < maxScroll - 0.5) {
+      if (scrollDebugOn() && (frames <= 3 || now - lastLoggedAt >= 500)) {
+        lastLoggedAt = now;
+        scrollLog('frame', frames, { scrollTop: Math.round(el.scrollTop), maxScroll });
+      }
+ 
+      if (pos < maxScroll - 0.5) {
         autoScrollRef.current = window.requestAnimationFrame(tick);
       } else {
-        autoScrollRef.current = null;
+        cancelAutoScroll('reached-bottom');
       }
     };
  
-    if (autoScrollRef.current !== null) {
-      window.cancelAnimationFrame(autoScrollRef.current);
-    }
     autoScrollRef.current = window.requestAnimationFrame(tick);
   };
  
   useEffect(() => {
     if (stage !== 'in') return;
+ 
+    // Reduced motion is a *user request*, so it is honoured for auto-scroll:
+    // guests who ask for it never get the page moved for them. Nothing else
+    // about the invitation depends on this — the "Scroll to continue" cue and
+    // the section progress pill are always shown, and manual scrolling is
+    // fully native, so these guests explore every section normally.
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
+    let startTimer: number | undefined;
+    scrollLog('invitation open — arming auto-scroll', { stage, reducedMotion: reduce.matches });
+ 
+    // Stops auto-scroll for good: cancels a running loop AND a startup timer
+    // that hasn't fired yet (otherwise the timer would start scrolling under a
+    // guest who is already scrolling).
+    const disarm = (reason: string) => {
+      if (startTimer !== undefined) {
+        window.clearTimeout(startTimer);
+        startTimer = undefined;
+        scrollLog('startup timer cancelled —', reason);
+      }
+      cancelAutoScroll(reason);
+    };
  
     // Any deliberate pointer/touch/wheel input pauses auto-scroll and never
     // restarts it on its own — the guest is now in control. Note this does
@@ -175,51 +253,67 @@ export default function Invitation() {
     // scroll events too; listening for the gestures that cause scrolling
     // (not scrolling itself) is what keeps this from immediately cancelling
     // its own programmatic scroll.
-    const handlePointerInteraction = () => cancelAutoScroll();
- 
+    const onWheel = () => disarm('guest wheel input');
+    const onTouch = () => disarm('guest touch');
+    const onPointer = () => disarm('guest pointer input');
     // Keyboard input pauses auto-scroll the same as any other interaction;
     // normal browser keyboard scrolling (arrows, space, Page Up/Down) is
     // left alone so it keeps working exactly as guests expect.
-    const handleKeyNav = () => cancelAutoScroll();
+    const onKey = () => disarm('guest keyboard input');
+    // Turning reduced motion on mid-way also ends auto-scroll immediately.
+    const onReduceChange = () => {
+      scrollLog('reduced-motion changed →', reduce.matches);
+      if (reduce.matches) disarm('reduced motion switched on');
+    };
  
     // A brief pause on section 1 before the cinematic auto-scroll begins,
     // so it reads as "the invitation is about to guide you" rather than
     // the page moving out from under the guest the instant it appears.
-    // Reduced-motion guests never get auto-scroll at all — normal browser
-    // scrolling is the only (fully sufficient) way through the invitation
-    // for them.
-    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const startTimer = window.setTimeout(() => {
-      if (!reduce.matches) startAutoScroll();
+    // The preference is read when the timer fires, not when it is armed.
+    startTimer = window.setTimeout(() => {
+      startTimer = undefined;
+      const scrollTop = getScrollingElement().scrollTop;
+      scrollLog('startup timer fired', { reducedMotion: reduce.matches, scrollTop: Math.round(scrollTop) });
+      if (reduce.matches) {
+        scrollLog('auto-scroll NOT started — reduced motion requested; cue + progress + manual scrolling only');
+        return;
+      }
+      if (scrollTop > 48) {
+        scrollLog('auto-scroll NOT started — guest has already scrolled');
+        return;
+      }
+      startAutoScroll();
     }, 1200);
+    scrollLog('startup timer armed', { delayMs: 1200 });
  
-    window.addEventListener('wheel', handlePointerInteraction, { passive: true });
-    window.addEventListener('touchstart', handlePointerInteraction, { passive: true });
-    window.addEventListener('pointerdown', handlePointerInteraction, { passive: true });
-    window.addEventListener('keydown', handleKeyNav);
+    window.addEventListener('wheel', onWheel, { passive: true });
+    window.addEventListener('touchstart', onTouch, { passive: true });
+    window.addEventListener('pointerdown', onPointer, { passive: true });
+    window.addEventListener('keydown', onKey);
+    reduce.addEventListener('change', onReduceChange);
  
     return () => {
-      window.clearTimeout(startTimer);
-      cancelAutoScroll();
-      window.removeEventListener('wheel', handlePointerInteraction);
-      window.removeEventListener('touchstart', handlePointerInteraction);
-      window.removeEventListener('pointerdown', handlePointerInteraction);
-      window.removeEventListener('keydown', handleKeyNav);
+      if (startTimer !== undefined) window.clearTimeout(startTimer);
+      cancelAutoScroll('effect cleanup (unmount or stage change)');
+      window.removeEventListener('wheel', onWheel);
+      window.removeEventListener('touchstart', onTouch);
+      window.removeEventListener('pointerdown', onPointer);
+      window.removeEventListener('keydown', onKey);
+      reduce.removeEventListener('change', onReduceChange);
     };
   }, [stage]);
  
-  // Shows the "scroll to continue" hint until the guest has scrolled even a
-  // little (by hand, or via auto-scroll) — self-contained and independent
-  // of the auto-scroll mechanism itself, so it still works even in the
-  // (unlikely, but possible) case auto-scroll fails to start at all.
-  useEffect(() => {
-    if (stage !== 'in') return;
-    setShowHint(true);
-    const onScroll = () => setShowHint(window.scrollY < 24);
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
-  }, [stage]);
- 
+  // Scene choreography. Reads where every scene sits on screen and publishes
+  // --p / --enter / --cover on the artwork scenes (see ArtScene). It only
+  // *reads* scroll position; it never intercepts wheel/touch events and never
+  // moves the page, so scrolling stays fully native. Every value is a pure
+  // function of the current rects, so fast flicks and scrolling back up can't
+  // leave a scene stuck half-faded.
+  //
+  // The same pass also works out which section is "current" for the progress
+  // pill. That part runs in EVERY motion mode (reduced motion included, where
+  // the scenes are laid out sequentially instead of pinned) and reuses the
+  // rects already being read, so there is no extra listener or rAF loop.
   useEffect(() => {
     if (stage === 'cover') return;
     const scenes = Array.from(document.querySelectorAll<HTMLElement>('main > [data-scene]'));
@@ -229,6 +323,8 @@ export default function Invitation() {
     const written = new WeakMap<HTMLElement, string>();
     let dwell: number[] = [];
     let frame = 0;
+    let shownSection = -1;
+    setSectionTotal(scenes.length);
  
     // Each scene's margin-bottom is its "hold": scroll distance during which it
     // stays pinned and perfectly still before the next scene starts to rise.
@@ -238,10 +334,24 @@ export default function Invitation() {
  
     const update = () => {
       frame = 0;
-      if (reduce.matches) return;
       const vh = window.innerHeight;
       // Read every rect first, then write, so the browser lays out once per frame.
       const rects = scenes.map((el) => el.getBoundingClientRect());
+ 
+      // Current section = the last one whose top edge has risen past mid-screen.
+      // Pinned scenes report top 0, so this works for the sticky stack and for
+      // the sequential reduced-motion layout alike. At the very bottom of the
+      // page it is always the last section.
+      let current = 0;
+      rects.forEach((r, i) => { if (r.top <= vh * 0.5) current = i; });
+      if (getMaxScroll() - getScrollingElement().scrollTop <= 2) current = scenes.length - 1;
+      if (current !== shownSection) {
+        shownSection = current;
+        setSectionIndex(current);
+        scrollLog('section', `${current + 1} / ${scenes.length}`);
+      }
+ 
+      if (reduce.matches) return; // reduced motion: no scene animation, just the layout
  
       scenes.forEach((el, i) => {
         if (el.dataset.scene !== 'art') return; // live sections (.event/.venue) only act as covers
@@ -293,13 +403,13 @@ export default function Invitation() {
     window.addEventListener('scroll', schedule, { passive: true });
     window.addEventListener('resize', onResize);
     window.addEventListener('pageshow', schedule); // back/forward cache restores
-    reduce.addEventListener('change', schedule);
+    reduce.addEventListener('change', onResize); // layout switches sticky <-> sequential, so re-measure
     return () => {
       if (frame) window.cancelAnimationFrame(frame);
       window.removeEventListener('scroll', schedule);
       window.removeEventListener('resize', onResize);
       window.removeEventListener('pageshow', schedule);
-      reduce.removeEventListener('change', schedule);
+      reduce.removeEventListener('change', onResize);
     };
   }, [stage]);
  
@@ -457,11 +567,19 @@ export default function Invitation() {
         )}
       </main>
  
-      {/* First-screen discoverability: a simple, self-contained cue that
-          more content exists below, independent of whether auto-scroll
-          ever starts or works. */}
-      {stage === 'in' && showHint && (
-        <div className="scroll-cue" aria-hidden="true">
+      {/* Navigation aids. Both are self-contained and independent of
+          auto-scroll: they render in every motion mode, so the invitation
+          always reads as a multi-section experience and can always be
+          explored by hand. */}
+      {stage === 'in' && sectionTotal > 0 && (
+        <div className="section-progress">
+          <span aria-hidden="true">{sectionIndex + 1} / {sectionTotal}</span>
+          <span className="sr-only">Section {sectionIndex + 1} of {sectionTotal}</span>
+        </div>
+      )}
+ 
+      {stage === 'in' && (
+        <div className={`scroll-cue${sectionIndex === 0 ? '' : ' is-hidden'}`} aria-hidden="true">
           <span className="scroll-cue-chevron">↓</span>
           <span className="scroll-cue-text">Scroll to continue</span>
         </div>
