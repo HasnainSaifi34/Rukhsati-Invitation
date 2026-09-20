@@ -206,7 +206,7 @@ body{margin:0;background:var(--deep);color:var(--ivory);font-family:var(--sans);
 .scroll-cue-text{font:500 10px var(--sans);letter-spacing:.24em;text-transform:uppercase;opacity:.85}
 @keyframes cueFade{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
 @keyframes cueBounce{0%,100%{transform:translateY(0)}50%{transform:translateY(7px)}}
-
+ 
 /* ============ SECTION PROGRESS / MANUAL NAV ============ */
 /* Reliable fallback required by the brief: works identically whether
    auto-scroll is running, has been paused by the guest, or never started
@@ -222,7 +222,7 @@ body{margin:0;background:var(--deep);color:var(--ivory);font-family:var(--sans);
 .section-nav button:hover{border-color:var(--gold2)}
 .section-nav button.active{background:var(--gold2);border-color:var(--gold2);transform:scale(1.35)}
 .section-nav button:focus-visible{outline:2px solid var(--gold2);outline-offset:3px}
-
+ 
 /* ============ GENERIC REVEAL ============ */
 .reveal{opacity:0;transform:translateY(18px);transition:opacity .9s var(--ease),transform .9s var(--ease)}
 .reveal.visible{opacity:1;transform:none}
