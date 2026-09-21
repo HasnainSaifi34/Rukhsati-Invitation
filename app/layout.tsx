@@ -9,16 +9,18 @@ export const metadata: Metadata = {
   title: 'SANIYA & HASNAIN — Rukhsati',
 
   description:
-    'You are warmly invited to the Rukhsati of Saniya Nadeem Sayyed and Hasnain Furqan Saifi on 27 September 2026 at Raza Hall, Govandi West, Mumbai.',
+    '27 September 2026 • Raza Hall, Govandi West, Mumbai • Rukhsati after Maghrib.',
 
   openGraph: {
     title: 'SANIYA & HASNAIN — Rukhsati',
 
     description:
-      'Rukhsati of Saniya Nadeem Sayyed & Hasnain Furqan Saifi • 27 September 2026 • Raza Hall, Govandi West, Mumbai.',
+      '27 September 2026 • Raza Hall, Govandi West, Mumbai • Rukhsati after Maghrib.',
 
     url: SITE_URL,
+
     siteName: 'SANIYA & HASNAIN — Rukhsati',
+
     type: 'website',
 
     images: [
@@ -26,7 +28,7 @@ export const metadata: Metadata = {
         url: `${SITE_URL}/og-image.jpg`,
         width: 1200,
         height: 630,
-        alt: 'Saniya & Hasnain — Rukhsati Invitation',
+        alt: 'Saniya and Hasnain Rukhsati Invitation',
       },
     ],
   },
@@ -37,7 +39,7 @@ export const metadata: Metadata = {
     title: 'SANIYA & HASNAIN — Rukhsati',
 
     description:
-      '27 September 2026 • Raza Hall, Govandi West, Mumbai',
+      '27 September 2026 • Raza Hall, Govandi West, Mumbai.',
 
     images: [`${SITE_URL}/og-image.jpg`],
   },
