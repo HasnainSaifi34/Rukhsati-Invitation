@@ -1,23 +1,30 @@
 import type { Metadata, Viewport } from 'next';
 import './invitation.css';
-
+const SITE_URL = "https://rukhsati-invitation.vercel.app";
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
+
   title: 'SANIYA & HASNAIN — Rukhsati',
+
   description:
     'Rukhsati invitation for Saniya Nadeem Sayyed and Hasnain Furqan Saifi — 27 September 2026, Raza Hall, Govandi West, Mumbai.',
 
   openGraph: {
     title: 'SANIYA & HASNAIN — Rukhsati',
+
     description:
-      'You are warmly invited to celebrate the Rukhsati of Saniya Nadeem Sayyed and Hasnain Furqan Saifi.',
-    type: 'website',
+      'Rukhsati invitation for Saniya Nadeem Sayyed and Hasnain Furqan Saifi.',
+
+    url: SITE_URL,
     siteName: 'SANIYA & HASNAIN — Rukhsati',
+    type: 'website',
+
     images: [
       {
-        url: '/og-image.jpg',
+        url: `${SITE_URL}/og-image.jpg`,
         width: 1200,
         height: 630,
-        alt: 'Saniya & Hasnain — Rukhsati Invitation',
+        alt: 'SANIYA & HASNAIN — Rukhsati Invitation',
       },
     ],
   },
@@ -27,7 +34,7 @@ export const metadata: Metadata = {
     title: 'SANIYA & HASNAIN — Rukhsati',
     description:
       'Rukhsati invitation for Saniya Nadeem Sayyed and Hasnain Furqan Saifi.',
-    images: ['/og-image.jpg'],
+    images: [`${SITE_URL}/og-image.jpg`],
   },
 };
 
