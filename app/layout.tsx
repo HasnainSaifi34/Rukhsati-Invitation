@@ -9,13 +9,13 @@ export const metadata: Metadata = {
   title: 'SANIYA & HASNAIN — Rukhsati',
 
   description:
-    '27 September 2026 • Raza Hall, Govandi West, Mumbai • Rukhsati after Maghrib.',
+    '27 September 2026 • Welcome Hall, Govandi East, Mumbai • Rukhsati after Maghrib.',
 
   openGraph: {
     title: 'SANIYA & HASNAIN — Rukhsati',
 
     description:
-      '27 September 2026 • Raza Hall, Govandi West, Mumbai • Rukhsati after Maghrib.',
+      '27 September 2026 • Welcome Hall, Govandi East, Mumbai • Rukhsati after Maghrib.',
 
     url: SITE_URL,
 
@@ -39,7 +39,7 @@ export const metadata: Metadata = {
     title: 'SANIYA & HASNAIN — Rukhsati',
 
     description:
-      '27 September 2026 • Raza Hall, Govandi West, Mumbai.',
+      '27 September 2026 • Welcome Hall, Govandi East, Mumbai.',
 
     images: [`${SITE_URL}/og-image.jpg`],
   },

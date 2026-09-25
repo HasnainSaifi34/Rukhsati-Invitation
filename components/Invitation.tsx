@@ -2,7 +2,7 @@
  
 import { useEffect, useMemo, useRef, useState } from 'react';
  
-const mapsUrl = 'https://www.google.com/maps/place/Raza+hall/@19.061649,72.9148915,1066m/data=!3m1!1e3!4m6!3m5!1s0x3be7c7d956555e75:0x735251cffa68dbaf!8m2!3d19.06094!4d72.91452!16s%2Fg%2F11rnk6cxgz?entry=ttu&g_ep=EgoyMDI2MDkxNi4wIKXMDSoASAFQAw%3D%3D';
+const mapsUrl = 'https://www.google.com/maps/place/Welcome+Hall/@19.0582007,72.9152806,1064m/data=!3m1!1e3!4m6!3m5!1s0x3be7c613a502d7db:0x58025090a24caf7d!8m2!3d19.0582125!4d72.9189531!16s%2Fg%2F11dfwyn33b?entry=ttu&g_ep=EgoyMDI2MDkyMi4wIKXMDSoASAFQAw%3D%3D';
 const targetMs = Date.parse('2026-09-27T19:00:00+05:30');
  
 function buildCalendarDays() {
@@ -458,7 +458,7 @@ export default function Invitation() {
       'BEGIN:VEVENT', 'UID:saniya-hasnain-rukhsati-20260927@invitation.local', 'DTSTAMP:20260101T000000Z',
       'DTSTART;TZID=Asia/Kolkata:20260927T190000',
       'SUMMARY:Rukhsati — Saniya & Hasnain',
-      'LOCATION:Raza Hall, Surey No. 3, P.L., Plot No. 96, PL Lokhande Marg, Gautam Nagar, Govandi West, Mumbai, Maharashtra 400043',
+      'LOCATION:Welcome Hall, Deonar Police Sta Rd, behind Cement factory, Govandi Slums, Bhim Nagar, Govandi East, Mumbai, Maharashtra 400043',
       'DESCRIPTION:Rukhsati of Saniya Nadeem Sayyed & Hasnain Furqan Saifi.',
       'END:VEVENT', 'END:VCALENDAR'
     ].join('\\n');
@@ -543,13 +543,13 @@ export default function Invitation() {
             <section className="venue reveal" id="venue" data-scene="live" style={{ zIndex: 7 }}>
               <div className="venue-inner">
                 <p className="section-label">THE VENUE</p>
-                <h2>RAZA HALL</h2>
+                <h2>Welcome HALL</h2>
                 <div className="venue-copy">
-                  <p>Surey No. 3, P.L., Plot No. 96, PL Lokhande Marg,<br />Gautam Nagar, Govandi West,<br />Mumbai, Maharashtra 400043</p>
+                  <p>Deonar Police Sta Rd, <br/> behind Cement factory, <br/> Govandi Slums, Bhim Nagar,<br/> Govandi East, Mumbai, Maharashtra 400043</p>
                 </div>
-                <div className="landmark"><span>📍 LANDMARK</span><strong>Gautam Nagar Playground</strong></div>
+                <div className="landmark"><span>📍 LANDMARK</span><strong>Opposite Rafiq Pan Shop </strong></div>
                 <div className="map-card">
-                  <iframe title="Map showing Raza Hall, Govandi West, Mumbai" loading="lazy" src="https://www.google.com/maps?q=Raza%20Hall%2C%20Govandi%20West%2C%20Mumbai&output=embed" />
+                  <iframe title="Map showing Welcome Hall, Govandi West, Mumbai" loading="lazy" src={mapsUrl} />
                 </div>
                 <div className="actions">
                   <a className="action-btn outline" target="_blank" rel="noopener noreferrer" href={mapsUrl}>OPEN IN GOOGLE MAPS ↗</a>
