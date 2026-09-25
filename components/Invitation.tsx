@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
  
 const mapsUrl = 'https://www.google.com/maps/place/Welcome+Hall/@19.0582007,72.9152806,1064m/data=!3m1!1e3!4m6!3m5!1s0x3be7c613a502d7db:0x58025090a24caf7d!8m2!3d19.0582125!4d72.9189531!16s%2Fg%2F11dfwyn33b?entry=ttu&g_ep=EgoyMDI2MDkyMi4wIKXMDSoASAFQAw%3D%3D';
 const targetMs = Date.parse('2026-09-27T19:00:00+05:30');
- 
+const mapsEmbedUrl = 'https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3770.091187168042!2d72.9152806152609!3d19.058200749999996!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3be7c613a502d7db%3A0x58025090a24caf7d!2sWelcome%20Hall!5e0!3m2!1sen!2sin!4v1695799054796!5m2!1sen!2sin';
 function buildCalendarDays() {
   const firstDay = new Date(2026, 8, 1).getDay();
   const daysInMonth = new Date(2026, 9, 0).getDate();
@@ -549,7 +549,7 @@ export default function Invitation() {
                 </div>
                 <div className="landmark"><span>📍 LANDMARK</span><strong>Opposite Rafiq Pan Shop </strong></div>
                 <div className="map-card">
-                  <iframe title="Map showing Welcome Hall, Govandi West, Mumbai" loading="lazy" src={mapsUrl} />
+                  <iframe title="Map showing Welcome Hall, Govandi West, Mumbai" loading="lazy" src={mapsEmbedUrl} />
                 </div>
                 <div className="actions">
                   <a className="action-btn outline" target="_blank" rel="noopener noreferrer" href={mapsUrl}>OPEN IN GOOGLE MAPS ↗</a>
