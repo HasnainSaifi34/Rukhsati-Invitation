@@ -452,26 +452,44 @@ export default function Invitation() {
     }
   };
  
-  const addToCalendar = () => {
-    const ics = [
-      'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Saniya Hasnain Rukhsati//EN', 'CALSCALE:GREGORIAN',
-      'BEGIN:VEVENT', 'UID:saniya-hasnain-rukhsati-20260927@invitation.local', 'DTSTAMP:20260101T000000Z',
-      'DTSTART;TZID=Asia/Kolkata:20260927T190000',
-      'SUMMARY:Rukhsati — Saniya & Hasnain',
-      'LOCATION:Welcome Hall, Deonar Police Sta Rd, behind Cement factory, Govandi Slums, Bhim Nagar, Govandi East, Mumbai, Maharashtra 400043',
-      'DESCRIPTION:Rukhsati of Saniya Nadeem Sayyed & Hasnain Furqan Saifi.',
-      'END:VEVENT', 'END:VCALENDAR'
-    ].join('\\n');
-    const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'Saniya-Hasnain-Rukhsati.ics';
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-  };
+const addToCalendar = () => {
+  const ics = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Saniya & Hasnain//Rukhsati Invitation//EN',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    'BEGIN:VEVENT',
+    'UID:saniya-hasnain-rukhsati-20260927@rukhsati-invitation',
+    `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z')}`,
+    'DTSTART:20260927T133000Z',
+    'DTEND:20260927T163000Z',
+    'SUMMARY:Rukhsati — Saniya & Hasnain',
+    'LOCATION:Welcome Hall, Govandi East, Mumbai, Maharashtra 400043',
+    'DESCRIPTION:Rukhsati of Saniya Nadeem Sayyed & Hasnain Furqan Saifi.',
+    'STATUS:CONFIRMED',
+    'TRANSP:OPAQUE',
+    'END:VEVENT',
+    'END:VCALENDAR',
+  ].join('\r\n');
+
+  const blob = new Blob(
+    [ics],
+    { type: 'text/calendar;charset=utf-8' }
+  );
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+
+  link.href = url;
+  link.download = 'Saniya-Hasnain-Rukhsati.ics';
+
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
  
   return (
     <>
